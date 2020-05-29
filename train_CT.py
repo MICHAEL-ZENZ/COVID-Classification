@@ -201,99 +201,23 @@ def main():
     accs = []
     save = os.path.join(save_path,'{}'.format(args.save_name))
 
-    for epoch in range(args.epoch):
-        train(model, train_loader, optimizer, PRINT_INTERVAL, epoch, args, device)
+    # for epoch in range(args.epoch):
+    #     train(model, train_loader, optimizer, PRINT_INTERVAL, epoch, args, device)
     
-        AUC, precision, recall, f1, acc, mean_loss = test(model, nb_classes, val_loader, device)
-        accs.append(acc)
-        print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc, mean_loss))
+    #     AUC, precision, recall, f1, acc, mean_loss = test(model, nb_classes, val_loader, device)
+    #     accs.append(acc)
+    #     print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc, mean_loss))
     
-        if np.max(accs) == acc:
-            torch.save(model.state_dict(), save)
-            print("saved")
-        sheduler.step(epoch)
+    #     if np.max(accs) == acc:
+    #         torch.save(model.state_dict(), save)
+    #         print("saved")
+    #     sheduler.step(epoch)
     print('...........Testing..........')
     model.load_state_dict(torch.load(save))
     AUC, precision, recall, f1, acc, mean_loss = test(model, nb_classes, test_loader, device)
 
     print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc,
                                                                                 mean_loss))
-def main_ensemble(models_config):
-
-
-    parser = argparse.ArgumentParser(description='COVID-19 CT Classification.')
-
-    parser.add_argument('--checkpoint-path',type = str, default='./checkpoint/CT')
-    parser.add_argument('--batch-size', type = int, default=16)
-
-    parser.add_argument('--root-dir',type=str,default='../data/dataset_5_5/dataset_4_26_with_seg/4_4_data_crop')
-
-    parser.add_argument('--train-COV',type=str,default='../data/dataset_5_5/train_COVID.txt')
-    parser.add_argument('--train-NonCOV',type=str,default='../data/dataset_5_5/train_NonCOVID.txt')
-
-    parser.add_argument('--val-COV',type=str,default='../data/dataset_5_5/val_COVID.txt')
-    parser.add_argument('--val-NonCOV',type=str,default='../data/dataset_5_5/val_NonCOVID.txt')
-
-    parser.add_argument('--test-COV',type=str,default='../data/dataset_5_5/test_COVID.txt')
-    parser.add_argument('--test-NonCOV',type=str,default='../data/dataset_5_5/test_NonCOVID.txt')
-
-
-    parser.add_argument('--multiscale', type=bool ,default=False)
-    args = parser.parse_args()
-
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print("Device {}".format(device))
-    # Create checkpoint file
-
-
-
-    normalize = transforms.Normalize(mean=[0.45271412, 0.45271412, 0.45271412],
-                                     std=[0.33165374, 0.33165374, 0.33165374])
-    test_trans = transforms.Compose(
-        [transforms.Resize((480, 480)),
-         transforms.ToTensor(),
-         normalize]
-    )
-
-    valset = CovidCTDataset(root_dir=args.root_dir,
-                            txt_COVID=args.val_COV,
-                            txt_NonCOVID=args.val_NonCOV,
-                            transform=test_trans
-                            )
-
-    testset = CovidCTDataset(root_dir=args.root_dir,
-                             txt_COVID=args.test_COV,
-                             txt_NonCOVID=args.test_NonCOV,
-                             transform=test_trans
-                             )
-
-
-    val_loader = DataLoader(valset, batch_size=args.batch_size)
-    test_loader = DataLoader(testset, batch_size=args.batch_size)
-
-    nb_classes = 2
-    num_model = len(models_config)
-    print(testset.classes)
-    model_list = []
-    weight = []
-    for i in range(num_model):
-        print(models_config[i])
-        weight.append(models_config[i][2])
-        model = MODEL_DICT[models_config[i][0]](num_classes=nb_classes).to(device)
-        if models_config[i][3]:
-            model = nn.DataParallel(model).to(device)
-        save_path = os.path.join(args.checkpoint_path, models_config[i][0])
-        save = os.path.join(save_path, models_config[i][1])
-        model.load_state_dict(torch.load(save))
-        if args.multiscale:
-            model = Ensemble.Multiscale(model)
-        model_list.append(model)
-    ensemble_model = Ensemble.EnsembleNet(model_list,weight).to(device)
-    AUC, precision, recall, f1, acc, mean_loss = test(ensemble_model, nb_classes, test_loader, device)
-
-    print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc,
-                                                                                mean_loss))
-    return acc
 def search():
     models_config_list = []
     accs = []

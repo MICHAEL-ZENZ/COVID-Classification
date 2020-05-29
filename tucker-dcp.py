@@ -131,12 +131,14 @@ def convertPaWeights2NonP(pretrained_state_dict):
 
 def buildAndTestDCPmodel(model_name, preTrainedModel, test_loader, device, R1_ratio, R2_ratio):
     dcpModel=DCP_MODEL_DICT[model_name](num_classes=2, R1_ratio=R1_ratio, R2_ratio=R2_ratio)
+    dcpModel.loadStateFromModel(preTrainedModel)
     if torch.cuda.device_count() >= 1:
         # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-        dcpModel = nn.DataParallel(dcpModel).to('gpu')
+        dcpModel = nn.DataParallel(dcpModel).to(device)
+    elif torch.cuda.device_count()==1:
+        dcpModel.to(device)
     elif torch.cuda.is_available():
         print("GPU detected but cannot use")
-    dcpModel.loadStateFromModel(preTrainedModel)
     
     AUC, precision, recall, f1, acc, mean_loss = test(dcpModel, 2, test_loader, device)
 
@@ -144,6 +146,36 @@ def buildAndTestDCPmodel(model_name, preTrainedModel, test_loader, device, R1_ra
                                                                                 mean_loss))
 
     return acc, recall[1]
+
+def saveDCPweights(model_name, preTrainedModel, test_loader, device, R1_ratio, R2_ratio):
+    dcpModel=DCP_MODEL_DICT[model_name](num_classes=2, R1_ratio=R1_ratio, R2_ratio=R2_ratio)
+    dcpModel.loadStateFromModel(preTrainedModel)
+    
+    save="checkpoint/CT/%s/%s_R1_%.3f_R2_%.3f.pt"%(model_name,model_name,R1_ratio,R2_ratio)
+    print('saving to %s'%(save))
+    torch.save(dcpModel.state_dict(),save)
+
+def testAndLoadFromChkpt(model_name, preTrainedModel, test_loader, device, R1_ratio, R2_ratio):
+    dcpModel=DCP_MODEL_DICT[model_name](num_classes=2, R1_ratio=R1_ratio, R2_ratio=R2_ratio)
+    save="checkpoint/CT/%s/%s_R1_%.3f_R2_%.3f.pt"%(model_name,model_name,R1_ratio,R2_ratio)
+    state_dict=torch.load(save)
+    dcpModel.load_state_dict(state_dict)
+
+    if torch.cuda.device_count() >= 1:
+        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+        dcpModel = nn.DataParallel(dcpModel).to(device)
+    elif torch.cuda.device_count()==1:
+        dcpModel.to(device)
+    elif torch.cuda.is_available():
+        print("GPU detected but cannot use")
+    
+    AUC, precision, recall, f1, acc, mean_loss = test(dcpModel, 2, test_loader, device)
+
+    print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc,
+                                                                                mean_loss))
+
+    return acc, recall[1]
+
 
 def main():
     parser = argparse.ArgumentParser(description='COVID-19 CT Classification.')
@@ -266,121 +298,21 @@ def main():
         for dR2 in range(1,9):
             r1,r2=dR1/8,dR2/8
             print("R1=%.3f, R2=%.3f"%(r1,r2))
-            acc,FN=buildAndTestDCPmodel(args.model_name, model, test_loader, device, r1, r2)
+            testAndLoadFromChkpt(args.model_name, model, test_loader, device, r1, r2)
+            # acc,FN=buildAndTestDCPmodel(args.model_name, model, test_loader, device, r1, r2)
             gc.collect()
-            yacc[-1].append(acc)
-            yFNs[-1].append(FN)
+            # yacc[-1].append(acc)
+            # yFNs[-1].append(FN)
     
-    x=[d/8 for d in range(1,9)]
-    for i in range(8):
-        plt.plot(x, yacc[i])
-    plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
-    for i in range(8):
-        plt.plot(x,yFNs[i], linestyle='-')
-    plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
-    plt.show()
+    # x=[d/8 for d in range(1,9)]
+    # for i in range(8):
+    #     plt.plot(x, yacc[i])
+    # plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
+    # for i in range(8):
+    #     plt.plot(x,yFNs[i], linestyle='-')
+    # plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
+    # plt.show()
 
-    
-def main_ensemble(models_config):
-
-
-    parser = argparse.ArgumentParser(description='COVID-19 CT Classification.')
-
-    parser.add_argument('--checkpoint-path',type = str, default='./checkpoint/CT')
-    parser.add_argument('--batch-size', type = int, default=16)
-
-    parser.add_argument('--root-dir',type=str,default='../data/dataset_5_5/dataset_4_26_with_seg/4_4_data_crop')
-
-    parser.add_argument('--train-COV',type=str,default='../data/dataset_5_5/train_COVID.txt')
-    parser.add_argument('--train-NonCOV',type=str,default='../data/dataset_5_5/train_NonCOVID.txt')
-
-    parser.add_argument('--val-COV',type=str,default='../data/dataset_5_5/val_COVID.txt')
-    parser.add_argument('--val-NonCOV',type=str,default='../data/dataset_5_5/val_NonCOVID.txt')
-
-    parser.add_argument('--test-COV',type=str,default='../data/dataset_5_5/test_COVID.txt')
-    parser.add_argument('--test-NonCOV',type=str,default='../data/dataset_5_5/test_NonCOVID.txt')
-
-
-    parser.add_argument('--multiscale', type=bool ,default=False)
-    args = parser.parse_args()
-
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print("Device {}".format(device))
-    # Create checkpoint file
-
-
-
-    normalize = transforms.Normalize(mean=[0.45271412, 0.45271412, 0.45271412],
-                                     std=[0.33165374, 0.33165374, 0.33165374])
-    test_trans = transforms.Compose(
-        [transforms.Resize((480, 480)),
-         transforms.ToTensor(),
-         normalize]
-    )
-
-    valset = CovidCTDataset(root_dir=args.root_dir,
-                            txt_COVID=args.val_COV,
-                            txt_NonCOVID=args.val_NonCOV,
-                            transform=test_trans
-                            )
-
-    testset = CovidCTDataset(root_dir=args.root_dir,
-                             txt_COVID=args.test_COV,
-                             txt_NonCOVID=args.test_NonCOV,
-                             transform=test_trans
-                             )
-
-
-    val_loader = DataLoader(valset, batch_size=args.batch_size)
-    test_loader = DataLoader(testset, batch_size=args.batch_size)
-
-    nb_classes = 2
-    num_model = len(models_config)
-    print(testset.classes)
-    model_list = []
-    weight = []
-    for i in range(num_model):
-        print(models_config[i])
-        weight.append(models_config[i][2])
-        model = MODEL_DICT[models_config[i][0]](num_classes=nb_classes).to(device)
-        if models_config[i][3]:
-            model = nn.DataParallel(model).to(device)
-        save_path = os.path.join(args.checkpoint_path, models_config[i][0])
-        save = os.path.join(save_path, models_config[i][1])
-        model.load_state_dict(torch.load(save))
-        if args.multiscale:
-            model = Ensemble.Multiscale(model)
-        model_list.append(model)
-    ensemble_model = Ensemble.EnsembleNet(model_list,weight).to(device)
-    AUC, precision, recall, f1, acc, mean_loss = test(ensemble_model, nb_classes, test_loader, device)
-
-    print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc,
-                                                                                mean_loss))
-    return acc
-def search():
-    models_config_list = []
-    accs = []
-    weight = [0, 1, 3, 5]
-    for i in range(100):
-        weight_index = np.random.randint(0,4,6)
-        models_config = (
-            # model name, model path, weight, data_parallel
-            ('resnet152', 'resnet152_4_4_crop_480_b16_pretrained.pt', weight[weight_index[0]], True),
-            ('resnet152', 'resnet152_4_4_crop_480_b16w1.2_pretrained.pt', weight[weight_index[1]], True),
-            ('resnext101', 'resnext101_4_4_crop_480_pretrained.pt', weight[weight_index[2]], True),
-            ('densenet169', 'densenet169-480-moco-soft-COVID.pt', weight[weight_index[3]], True),
-            ('densenet169', 'densenet169_4_4_crop_480_b16_pretrained.pt', weight[weight_index[4]], True),
-            ('densenet169', 'densenet169_soft_480_pretrained.pt', weight[weight_index[5]], True),
-        )
-        if models_config in models_config_list:
-            continue
-        models_config_list.append(models_config)
-
-        acc = main_ensemble(models_config)
-        accs.append(acc)
-    best = np.argmax(accs)
-    print("-----------------------Best model-----------------------")
-    main_ensemble(models_config_list[best])
 
 if __name__ == '__main__':
 
