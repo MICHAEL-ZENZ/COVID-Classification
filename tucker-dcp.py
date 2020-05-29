@@ -131,6 +131,11 @@ def convertPaWeights2NonP(pretrained_state_dict):
 
 def buildAndTestDCPmodel(model_name, preTrainedModel, test_loader, device, R1_ratio, R2_ratio):
     dcpModel=DCP_MODEL_DICT[model_name](num_classes=2, R1_ratio=R1_ratio, R2_ratio=R2_ratio)
+    if torch.cuda.device_count() >= 1:
+        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+        dcpModel = nn.DataParallel(dcpModel).to('gpu')
+    elif torch.cuda.is_available():
+        print("GPU detected but cannot use")
     dcpModel.loadStateFromModel(preTrainedModel)
     
     AUC, precision, recall, f1, acc, mean_loss = test(dcpModel, 2, test_loader, device)
