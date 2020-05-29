@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: xyang-login
+spec:
+  containers:
+  - name: vol-container
+    image: gitlab-registry.nautilus.optiputer.net/yol070/research-containers/research-login-v2
+    command: ["/bin/bash"]
+    args: ["-c", "sleep infinity"]
+    resources:
+      requests:
+        memory: "8Gi"
+        cpu: 2
+      limits:
+        nvidia.com/gpu: 1
+        memory: "8Gi"
+        cpu: 2
+    volumeMounts:
+    - name: xyang-volume     #use your own volune path
+      mountPath: /xyang-volume
+  restartPolicy: Never
+  volumes:
+    - name: xyang-volume
+      persistentVolumeClaim:
+        claimName: xyang-volume
