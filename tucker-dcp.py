@@ -170,7 +170,7 @@ def testAndLoadFromChkpt(model_name, preTrainedModel, test_loader, device, R1_ra
         print("GPU detected but cannot use")
     
     AUC, precision, recall, f1, acc, mean_loss = test(dcpModel, 2, test_loader, device)
-
+    acc=acc.numpy().tolist()
     print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc,
                                                                                 mean_loss))
 
@@ -289,6 +289,7 @@ def main():
     model.load_state_dict(pretrained_state_dict)
 
     # acc,FN=buildAndTestDCPmodel(args.model_name, model, test_loader, device, 0.5, 0.5)
+    
 
     yacc,yFNs=[],[]
     for dR1 in range(1,9):
@@ -303,15 +304,19 @@ def main():
             gc.collect()
             # yacc[-1].append(acc)
             # yFNs[-1].append(FN)
+
+    for i in range(8):
+        if yacc[i]==np.nan:yacc[i]=0
+        if yFNs[i]==np.nan:yFNs[i]=0
     
-    # x=[d/8 for d in range(1,9)]
-    # for i in range(8):
-    #     plt.plot(x, yacc[i])
-    # plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
-    # for i in range(8):
-    #     plt.plot(x,yFNs[i], linestyle='-')
-    # plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
-    # plt.show()
+    x=[d/8 for d in range(1,9)]
+    for i in range(8):
+        plt.plot(x, yacc[i])
+    plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
+    for i in range(8):
+        plt.plot(x,yFNs[i], linestyle='-')
+    plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
+    plt.show()
 
 
 if __name__ == '__main__':

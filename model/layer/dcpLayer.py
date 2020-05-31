@@ -94,7 +94,7 @@ def tuckerDCP_Conv2D(in_channels, out_channels, kernel_size:int,
                 R1_ratio=1.0, R2_ratio=1.0,
                 stride:int=1,padding:int=0, dilation:int=1, groups=1,
                 bias=True, padding_mode='zeros'):
-  if kernel_size>1 and in_channels>=8 and out_channels>=8:
+  if kernel_size>1 and in_channels>=16 and out_channels>=16:
     return dcpConv2D(in_channels, out_channels, kernel_size,
                 R1_ratio, R2_ratio,
                 stride, padding, dilation, groups,
