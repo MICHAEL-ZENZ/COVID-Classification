@@ -31,7 +31,7 @@ class prunnableConv2D(nn.Module):
     
   def forward(self, x):
 
-    weights=self.conv.weight.data.numpy()
+    weights=self.conv.weight.data.cpu().numpy()
     weights=weights*self.mask
     self.conv.weight.data=torch.from_numpy(weights.astype(np.float32))
     x=self.conv(x)
@@ -41,7 +41,7 @@ class prunnableConv2D(nn.Module):
   def setPruneRatio(self, ratio=0.0):
     if not (ratio>=0 and ratio <=1):
       raise ValueError("Invalid Prune Ratio:%f"%ratio)
-    absweights=np.abs(self.conv.weight.data.numpy())
+    absweights=np.abs(self.conv.weight.data.cpu().numpy())
     weights_sort=absweights.reshape(-1)
     weights_sort.sort()
     thresh=weights_sort[int(len(weights_sort)*ratio)]
@@ -64,7 +64,7 @@ class prunnableLinear(nn.Module):
     
   def forward(self, x):
 
-    weights=self.linear.weight.data.numpy()
+    weights=self.linear.weight.data.cpu().numpy()
     weights=weights*self.mask
     self.linear.weight.data=torch.from_numpy(weights)
     x=self.linear(x)
@@ -74,7 +74,7 @@ class prunnableLinear(nn.Module):
   def setPruneRatio(self, ratio=0.0):
     if not (ratio>=0 and ratio <=1):
       raise ValueError("Invalid Prune Ratio:%f"%ratio)
-    absweights=np.abs(self.linear.weight.data.numpy())
+    absweights=np.abs(self.linear.weight.data.cpu().numpy())
     weights_sort=absweights.reshape(-1)
     weights_sort.sort()
     thresh=weights_sort[int(len(weights_sort)*ratio)]
