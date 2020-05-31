@@ -33,7 +33,7 @@ class prunnableConv2D(nn.Module):
 
     weights=self.conv.weight.data.cpu().numpy()
     weights=weights*self.mask
-    self.conv.weight.data=torch.from_numpy(weights.astype(np.float32))
+    self.conv.weight.data=torch.from_numpy(weights.astype(np.float32)).cuda()
     x=self.conv(x)
 
     return x
@@ -66,7 +66,7 @@ class prunnableLinear(nn.Module):
 
     weights=self.linear.weight.data.cpu().numpy()
     weights=weights*self.mask
-    self.linear.weight.data=torch.from_numpy(weights)
+    self.linear.weight.data=torch.from_numpy(weights).cuda()
     x=self.linear(x)
 
     return x
