@@ -49,10 +49,9 @@ class prunnableConv2D(nn.Module):
   
   def resetPruneRatio(self):
     self.mask[True]=1
-    print('hehe')
 
 class prunnableLinear(nn.Module):
-  def __init__(self, in_channels, out_channels, bias=False):
+  def __init__(self, in_channels, out_channels, bias=True):
     super(prunnableLinear, self).__init__()
 
     self.in_channels=in_channels
@@ -77,8 +76,8 @@ class prunnableLinear(nn.Module):
     weights_sort=absweights.reshape(-1)
     weights_sort.sort()
     thresh=weights_sort[int(len(weights_sort)*ratio)]
-    self.mask[abs(weights)<thresh]=0
-    self.mask[abs(weights)>=thresh]=1
+    self.mask[absweights<thresh]=0
+    self.mask[absweights>=thresh]=1
   
   def resetPruneRatio(self):
     self.mask[True]=1
