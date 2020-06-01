@@ -32,10 +32,9 @@ class prunnableConv2D(nn.Module):
   def forward(self, x):
 
     weights=self.conv.weight.data.cpu().numpy()
-    weights=weights*self.mask
-    self.conv.weight.data=torch.from_numpy(weights.astype(np.float32)).cuda()
+    self.conv.weight.data=torch.from_numpy((weights*self.mask).astype(np.float32))
     x=self.conv(x)
-
+    self.conv.weight.data=torch.from_numpy(weights)
     return x
 
   def setPruneRatio(self, ratio=0.0):
@@ -50,6 +49,7 @@ class prunnableConv2D(nn.Module):
   
   def resetPruneRatio(self):
     self.mask[True]=1
+    print('hehe')
 
 class prunnableLinear(nn.Module):
   def __init__(self, in_channels, out_channels, bias=False):
@@ -65,10 +65,9 @@ class prunnableLinear(nn.Module):
   def forward(self, x):
 
     weights=self.linear.weight.data.cpu().numpy()
-    weights=weights*self.mask
-    self.linear.weight.data=torch.from_numpy(weights).cuda()
+    self.linear.weight.data=torch.from_numpy((weights*self.mask).astype(np.float32))
     x=self.linear(x)
-
+    self.linear.weight.data=torch.from_numpy(weights)
     return x
 
   def setPruneRatio(self, ratio=0.0):

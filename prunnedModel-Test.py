@@ -251,7 +251,7 @@ for m in model.modules():
     yFN=[]
     
     if isinstance(m, (prunnableConv2D,prunnableLinear)):
-        print(m)
+        print(m) 
         for r in ratios:
             m.setPruneRatio(r)
             print('prune ratio:%f'%r)
@@ -260,7 +260,7 @@ for m in model.modules():
                                                                             mean_loss))
             yACC.append(acc)
             yFN.append(recall[1])
-            m.resetPruneRatio()
+        m.resetPruneRatio()
     if isinstance(m,prunnableConv2D):
         yconvACC.append(yACC)
         yconvFN.append(yFN)
