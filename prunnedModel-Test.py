@@ -137,6 +137,10 @@ def convertStateDict2Prunnable(state_dict):
         if 'conv' in k or 'downsample.0' in k:
             p=k.find('.weight')
             k=k[:p]+'.conv'+k[p:]
+        elif 'fc' in k:
+            p=k.find('fc')
+            k=k[:p+3]+'linear.'+k[p+3:]
+            
 
         prunedStateDict[k]=v
     return prunedStateDict
