@@ -1,6 +1,7 @@
-from model import Densenet, Inceptionv3, ResNet, VGG, SimpleCNN, Efficientnet, ResNeSt, Ensemble,SeResNet, Deeplabv3
+from model import Densenet, ResNet, VGG
 from utils import CovidCTDataset,metrics, SimCLR_loss, LabelSmoothSoftmaxCE
 from utils import autoaugment as auto
+
 from torch.utils.data import DataLoader
 import argparse
 import torch
@@ -13,6 +14,7 @@ import random
 from torchvision import transforms
 import numpy as np
 from sklearn.metrics import roc_auc_score
+import easydict
 
 MODEL_DICT = {
     'densenet121': Densenet.densenet121,
@@ -23,22 +25,21 @@ MODEL_DICT = {
     'resnet50': ResNet.resnet50,
     'resnet101': ResNet.resnet101,
     'resnet152': ResNet.resnet152,
-    'seresnet50': SeResNet.se_resnet50,
-    'seresnet101': SeResNet.se_resnet101,
-    'seresnet152': SeResNet.se_resnet152,
-    'resnext101': ResNet.resnext101_32x8d,
-    'resnest50': ResNeSt.resnest50,
-    'resnest200': ResNeSt.resnest200,
     'wide_resnet101': ResNet.wide_resnet101_2,
     'wide_resnet50': ResNet.wide_resnet50_2,
     'vgg16': VGG.vgg16,
-    'CNN': SimpleCNN.CNN,
-    'Linear': SimpleCNN.Linear,
-    'SimpleCNN': SimpleCNN.SimpleCNN,
-    'efficientnet-b7': Efficientnet.efficientnetb7,
-    'efficientnet-b1': Efficientnet.efficientnetb1,
-    'efficientnet-b0': Efficientnet.efficientnetb0
 }
+
+models_config = (
+    # model name, model path, weight, data_parallel
+    ('resnet152', 'resnet152_4_4_crop_480_b16_pretrained.pt', 1, True),
+    ('resnet152', 'resnet152_4_4_crop_480_b16w1.2_pretrained.pt', 1, True),
+    ('resnext101', 'resnext101_4_4_crop_480_pretrained.pt', 1, True),
+    ('densenet169', 'densenet169-480-moco-soft-COVID.pt', 1, True),
+    ('densenet169', 'densenet169_4_4_crop_480_b16_pretrained.pt', 1, True),
+    ('densenet169', 'densenet169_soft_480_pretrained.pt', 1, True),
+)
+
 def train(model, train_loader, optimizer, PRINT_INTERVAL, epoch, args, device):
     model.train()
     # LOSS_FUNC = LabelSmoothSoftmaxCE()
@@ -109,150 +110,114 @@ def test_mask(model, nb_classes, test_loader, device):
 
     return AUC, precision, recall, f1, acc, avg_val_loss
 
-def main():
-    parser = argparse.ArgumentParser(description='COVID-19 CT Classification.')
-    parser.add_argument('--model-name',  type=str, default='resnet50')
-    parser.add_argument('--checkpoint-path',type = str, default='./checkpoint/CT')
-    parser.add_argument('--batch-size', type = int, default=16)
-    parser.add_argument('--lr', type=float, default=1e-4)
-    parser.add_argument('--epoch',type = int ,default=50)
-    parser.add_argument('--root-dir',type=str,default='./COVID-CT/Images-processed')
 
-    parser.add_argument('--train-COV',type=str,default='./COVID-CT/Data-split/COVID/trainCT_COVID.txt')
-    parser.add_argument('--train-NonCOV',type=str,default='./COVID-CT/Data-split/NonCOVID/trainCT_NonCOVID.txt')
+args = easydict.EasyDict({
+    'model_name':'resnet18',
+    'checkpoint_path':'./checkpoint/CT',
+    'batch_size':16,
+    'lr':1e-4,
+    'epoch':50,
+    'root_dir':'./COVID-CT/Images-processed',
 
-    parser.add_argument('--val-COV',type=str,default='./COVID-CT/Data-split/COVID/valCT_COVID.txt')
-    parser.add_argument('--val-NonCOV',type=str,default='./COVID-CT/Data-split/NonCOVID/valCT_NonCOVID.txt')
+    'train_COV':'./COVID-CT/Data-split/COVID/trainCT_COVID.txt',
+    'train_NonCOV':'./COVID-CT/Data-split/NonCOVID/trainCT_NonCOVID.txt',
 
-    parser.add_argument('--test-COV',type=str,default='./COVID-CT/Data-split/COVID/testCT_COVID.txt')
-    parser.add_argument('--test-NonCOV',type=str,default='./COVID-CT/Data-split/NonCOVID/testCT_NonCOVID.txt')
+    'val_COV':'./COVID-CT/Data-split/COVID/valCT_COVID.txt',
+    'val_NonCOV':'./COVID-CT/Data-split/NonCOVID/valCT_NonCOVID.txt',
 
-    parser.add_argument('--pretrained',type=bool, default=True)
-    parser.add_argument('--save-name',type=str, default='densenet169_480_newdata_pretrained.pt')
+    'test_COV':'./COVID-CT/Data-split/COVID/testCT_COVID.txt',
+    'test_NonCOV':'./COVID-CT/Data-split/NonCOVID/testCT_NonCOVID.txt',
 
-    args = parser.parse_args()
+    'pretrained':True,
+    'save_name':'ResNet18.pt'
+})
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Device {}".format(device))
-    # Create checkpoint file
-    save_path = os.path.join(args.checkpoint_path, args.model_name)
-    if os.path.exists(save_path) == False:
-        os.makedirs(save_path)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Device {}".format(device))
+# Create checkpoint file
+save_path = os.path.join(args.checkpoint_path, args.model_name)
+if os.path.exists(save_path) == False:
+    os.makedirs(save_path)
 
-    normalize = transforms.Normalize(mean=[0.45271412, 0.45271412, 0.45271412],
-                                     std=[0.33165374, 0.33165374, 0.33165374])
-    test_trans = transforms.Compose(
-                                 [
-                                  transforms.Resize((480,480)),
-                                  transforms.ToTensor(),
-                                  normalize
-                                 ]
-                             )
-    trainset = CovidCTDataset(root_dir=args.root_dir,
-                              txt_COVID=args.train_COV,
-                              txt_NonCOVID=args.train_NonCOV,
-                                transform=transforms.Compose(
-                                    [transforms.RandomResizedCrop((480,480),scale=(0.8,1.2)),
-                                     transforms.RandomHorizontalFlip(),
-                                     auto.ImageNetPolicy(),
-                                     transforms.ToTensor(),
-                                     normalize
-                                     ]
-                                ))
-    valset = CovidCTDataset(root_dir=args.root_dir,
-                            txt_COVID=args.val_COV,
-                            txt_NonCOVID=args.val_NonCOV,
-                             transform=test_trans
-                             )
+normalize = transforms.Normalize(mean=[0.45271412, 0.45271412, 0.45271412],
+                                    std=[0.33165374, 0.33165374, 0.33165374])
+test_trans = transforms.Compose(
+                                [
+                                transforms.Resize((480,480)),
+                                transforms.ToTensor(),
+                                normalize
+                                ]
+                            )
+trainset = CovidCTDataset(root_dir=args.root_dir,
+                            txt_COVID=args.train_COV,
+                            txt_NonCOVID=args.train_NonCOV,
+                            transform=transforms.Compose(
+                                [transforms.RandomResizedCrop((480,480),scale=(0.8,1.2)),
+                                    transforms.RandomHorizontalFlip(),
+                                    auto.ImageNetPolicy(),
+                                    transforms.ToTensor(),
+                                    normalize
+                                    ]
+                            ))
+valset = CovidCTDataset(root_dir=args.root_dir,
+                        txt_COVID=args.val_COV,
+                        txt_NonCOVID=args.val_NonCOV,
+                            transform=test_trans
+                            )
 
-    testset = CovidCTDataset(root_dir=args.root_dir,
-                             txt_COVID=args.test_COV,
-                             txt_NonCOVID=args.test_NonCOV,
-                               transform=test_trans
-                               )
+testset = CovidCTDataset(root_dir=args.root_dir,
+                            txt_COVID=args.test_COV,
+                            txt_NonCOVID=args.test_NonCOV,
+                            transform=test_trans
+                            )
 
-    train_loader = DataLoader(trainset,
-                              batch_size=args.batch_size,
-                              num_workers=8,
-                              shuffle=True)
-    val_loader = DataLoader(valset, batch_size=args.batch_size)
-    test_loader = DataLoader(testset,batch_size=args.batch_size)
+train_loader = DataLoader(trainset,
+                            batch_size=args.batch_size,
+                            num_workers=8,
+                            shuffle=True)
+val_loader = DataLoader(valset, batch_size=args.batch_size)
+test_loader = DataLoader(testset,batch_size=args.batch_size)
 
-    PRINT_INTERVAL = 10
-    nb_classes = 2
-    seg_num_class = 2
-    print(args.model_name,trainset.classes)
-
-
-    model = MODEL_DICT[args.model_name](num_classes=nb_classes, pretrained=args.pretrained)
-    # model = Deeplabv3.DeeplabVV3(model, num_class=seg_num_class)
-    if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-        model = nn.DataParallel(model).to(device)
-    elif torch.cuda.is_available():
-        print("GPU detected but cannot use")
+PRINT_INTERVAL = 10
+nb_classes = 2
+seg_num_class = 2
+print(args.model_name,trainset.classes)
 
 
-    optimizer = torch.optim.Adam(model.parameters(),lr = args.lr)
-    sheduler = torch. optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
-    # sheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_max=10)
-    # sheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=15)
-    accs = []
-    save = os.path.join(save_path,'{}'.format(args.save_name))
+model = MODEL_DICT[args.model_name](num_classes=nb_classes, pretrained=args.pretrained)
+# model = Deeplabv3.DeeplabVV3(model, num_class=seg_num_class)
+if torch.cuda.device_count() > 1:
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+    model = nn.DataParallel(model).to(device)
+elif torch.cuda.device_count()==1:
+    model.to(device)
+elif torch.cuda.is_available():
+    print("GPU detected but cannot use")
 
-    # for epoch in range(args.epoch):
-    #     train(model, train_loader, optimizer, PRINT_INTERVAL, epoch, args, device)
-    
-    #     AUC, precision, recall, f1, acc, mean_loss = test(model, nb_classes, val_loader, device)
-    #     accs.append(acc)
-    #     print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc, mean_loss))
-    
-    #     if np.max(accs) == acc:
-    #         torch.save(model.state_dict(), save)
-    #         print("saved")
-    #     sheduler.step(epoch)
-    print('...........Testing..........')
-    model.load_state_dict(torch.load(save))
-    AUC, precision, recall, f1, acc, mean_loss = test(model, nb_classes, test_loader, device)
 
-    print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc,
-                                                                                mean_loss))
-def search():
-    models_config_list = []
-    accs = []
-    weight = [0, 1, 3, 5]
-    for i in range(100):
-        weight_index = np.random.randint(0,4,6)
-        models_config = (
-            # model name, model path, weight, data_parallel
-            ('resnet152', 'resnet152_4_4_crop_480_b16_pretrained.pt', weight[weight_index[0]], True),
-            ('resnet152', 'resnet152_4_4_crop_480_b16w1.2_pretrained.pt', weight[weight_index[1]], True),
-            ('resnext101', 'resnext101_4_4_crop_480_pretrained.pt', weight[weight_index[2]], True),
-            ('densenet169', 'densenet169-480-moco-soft-COVID.pt', weight[weight_index[3]], True),
-            ('densenet169', 'densenet169_4_4_crop_480_b16_pretrained.pt', weight[weight_index[4]], True),
-            ('densenet169', 'densenet169_soft_480_pretrained.pt', weight[weight_index[5]], True),
-        )
-        if models_config in models_config_list:
-            continue
-        models_config_list.append(models_config)
+optimizer = torch.optim.Adam(model.parameters(),lr = args.lr)
+sheduler = torch. optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
+# sheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_max=10)
+# sheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=15)
+accs = []
+save = os.path.join(save_path,'{}'.format(args.save_name))
 
-        acc = main_ensemble(models_config)
-        accs.append(acc)
-    best = np.argmax(accs)
-    print("-----------------------Best model-----------------------")
-    main_ensemble(models_config_list[best])
-if __name__ == '__main__':
-    print("Start training")
-    # search()
-    models_config = (
-        # model name, model path, weight, data_parallel
-        ('resnet152', 'resnet152_4_4_crop_480_b16_pretrained.pt', 1, True),
-        ('resnet152', 'resnet152_4_4_crop_480_b16w1.2_pretrained.pt', 1, True),
-        ('resnext101', 'resnext101_4_4_crop_480_pretrained.pt', 1, True),
-        ('densenet169', 'densenet169-480-moco-soft-COVID.pt', 1, True),
-        ('densenet169', 'densenet169_4_4_crop_480_b16_pretrained.pt', 1, True),
-        ('densenet169', 'densenet169_soft_480_pretrained.pt', 1, True),
-    )
-    # main_ensemble(models_config)
-    main()
+for epoch in range(args.epoch):
+    train(model, train_loader, optimizer, PRINT_INTERVAL, epoch, args, device)
+
+    AUC, precision, recall, f1, acc, mean_loss = test(model, nb_classes, val_loader, device)
+    accs.append(acc)
+    print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc, mean_loss))
+
+    if np.max(accs) == acc:
+        torch.save(model.state_dict(), save)
+        print("saved")
+    sheduler.step(epoch)
+
+print('...........Testing..........')
+model.load_state_dict(torch.load(save))
+AUC, precision, recall, f1, acc, mean_loss = test(model, nb_classes, test_loader, device)
+
+print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc,
+                                                                            mean_loss))

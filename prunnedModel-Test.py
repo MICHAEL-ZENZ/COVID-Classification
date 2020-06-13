@@ -1,8 +1,12 @@
-from model import Densenet, Inceptionv3, ResNet, VGG, SimpleCNN, Efficientnet, ResNeSt, Ensemble,SeResNet, Deeplabv3
+# To add a new cell, type '# %%'
+# To add a new markdown cell, type '# %% [markdown]'
+# %%
+from model import Densenet, ResNet, VGG
 from model import prunnableResNet
 from model.layer.prunableLayer import prunnableConv2D,prunnableLinear
 from utils import CovidCTDataset,metrics, SimCLR_loss, LabelSmoothSoftmaxCE
 from utils import autoaugment as auto
+
 from torch.utils.data import DataLoader
 import argparse
 import torch
@@ -22,6 +26,11 @@ import easydict
 
 import gc
 
+print('Import Complete')
+
+
+# %%
+
 MODEL_DICT = {
     'densenet121': Densenet.densenet121,
     'densenet161': Densenet.densenet161,
@@ -31,21 +40,7 @@ MODEL_DICT = {
     'resnet50': ResNet.resnet50,
     'resnet101': ResNet.resnet101,
     'resnet152': ResNet.resnet152,
-    'seresnet50': SeResNet.se_resnet50,
-    'seresnet101': SeResNet.se_resnet101,
-    'seresnet152': SeResNet.se_resnet152,
-    'resnext101': ResNet.resnext101_32x8d,
-    'resnest50': ResNeSt.resnest50,
-    'resnest200': ResNeSt.resnest200,
-    'wide_resnet101': ResNet.wide_resnet101_2,
-    'wide_resnet50': ResNet.wide_resnet50_2,
     'vgg16': VGG.vgg16,
-    'CNN': SimpleCNN.CNN,
-    'Linear': SimpleCNN.Linear,
-    'SimpleCNN': SimpleCNN.SimpleCNN,
-    'efficientnet-b7': Efficientnet.efficientnetb7,
-    'efficientnet-b1': Efficientnet.efficientnetb1,
-    'efficientnet-b0': Efficientnet.efficientnetb0
 }
 
 PRUNNABLE_MODEL_DICT={
@@ -156,7 +151,7 @@ models_config = (
 )
 
 args = easydict.EasyDict({
-    'model_name':'resnet50',
+    'model_name':'resnet18',
     'checkpoint_path':'./checkpoint/CT',
     'batch_size':16,
     'lr':1e-4,
@@ -173,7 +168,7 @@ args = easydict.EasyDict({
     'test_NonCOV':'./COVID-CT/Data-split/NonCOVID/testCT_NonCOVID.txt',
 
     'pretrained':True,
-    'save_name':'resnet50_pretrained.pt'
+    'save_name':'ResNet18.pt'
 })
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -232,10 +227,19 @@ model = PRUNNABLE_MODEL_DICT[args.model_name](num_classes=nb_classes, pretrained
 accs = []
 save = os.path.join(save_path,'{}'.format(args.save_name))
 
+cntConv=0
+cntDense=0
+
+for m in model.modules():
+    if isinstance(m, prunnableConv2D):
+        cntConv+=1
+    elif isinstance(m, prunnableLinear):
+        cntDense+=1
+print("In total %d conv, %d dense"%(cntConv,cntDense))
+
 print('...........Testing..........')
 pretrained_state_dict=torch.load(save, map_location=torch.device('cpu'))
-if not torch.cuda.is_available():
-    pretrained_state_dict=convertPaWeights2NonP(pretrained_state_dict)
+pretrained_state_dict=convertPaWeights2NonP(pretrained_state_dict)
 model.load_state_dict(convertStateDict2Prunnable(pretrained_state_dict))
 
 if torch.cuda.device_count() > 1:
@@ -247,14 +251,24 @@ elif torch.cuda.device_count() == 1:
 elif torch.cuda.is_available():
     print("GPU detected but cannot use")
 
+
+# %%
+
+
+
+# %%
+
 ratios=[i/100 for i in range(0,91,10)]
 yconvACC,yconvFN=[],[]
 ydenseACC,ydenseFN=[],[]
+cntConv=-1
 for m in model.modules():
     yACC=[]
     yFN=[]
-    
     if isinstance(m, (prunnableConv2D,prunnableLinear)):
+        if isinstance(m,prunnableConv2D):
+            cntConv+=1
+            if cntConv%10!=0:continue
         print(m) 
         for r in ratios:
             m.setPruneRatio(r)
@@ -262,29 +276,61 @@ for m in model.modules():
             AUC, precision, recall, f1, acc, mean_loss = test(model, 2, test_loader, device)
             print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc,
                                                                             mean_loss))
-            yACC.append(acc)
+            yACC.append(acc.numpy().tolist())
             yFN.append(recall[1])
-        m.resetPruneRatio()
+            m.resetPruneRatio()
     if isinstance(m,prunnableConv2D):
-        yconvACC.append(yACC)
-        yconvFN.append(yFN)
+        yconvACC.append(yACC.copy())
+        yconvFN.append(yFN.copy())
     elif isinstance(m,prunnableLinear):
-        ydenseACC.append(yACC)
-        ydenseFN.append(yFN)
+        ydenseACC.append(yACC.copy())
+        ydenseFN.append(yFN.copy())
 
-# for i in range(8):
-#     if yacc[i]==np.nan:yacc[i]=0
-#     if yFNs[i]==np.nan:yFNs[i]=0
 
+# %%
+np.save('yconvACC.npy', yconvACC)
+np.save('yconvFN.npy', yconvFN)
+np.save('ydenseACC.npy', ydenseACC)
+np.save('ydenseFN.npy', ydenseFN)
+yconvACC_bak,yconvFN_bak=yconvACC.copy(),yconvFN.copy()
+ydenseACC_bak,ydenseFN_bak=ydenseACC.copy(),ydenseFN.copy()
+
+
+# %%
+
+yconvACC,yconvFN=np.load('yconvACC.npy'),np.load('yconvFN.npy')
+ydenseACC,ydenseFN=np.load('ydenseACC.npy'),np.load('ydenseFN.npy')
+
+plt.figure(figsize=(15,9))
+plt.subplots_adjust(hspace=0.5)
+
+plt.subplot(2,2,1)
 for yACC in yconvACC:
     plt.plot(ratios, yACC)
+plt.title("Accuracy")
+plt.legend(["conv"+str(i*10+1) for i in range(5)], loc='lower right')
+plt.subplot(2,2,2)
+for yFN in yconvFN:
+    plt.plot(ratios, yFN)
+plt.title("False Negative")
+plt.legend(["conv"+str(i*10+1) for i in range(5)], loc='lower left')
+plt.subplot(2,2,3)
+for yACC in ydenseACC:
+    plt.plot(ratios,yACC)
+plt.title("Accuracy")
+plt.legend(["dense"], loc='lower right')
+plt.subplot(2,2,4)
+for yFN in ydenseFN:
+    plt.plot(ratios,yFN)
+plt.title("False Negative")
+plt.legend(["dense"], loc='lower right')
+
 
 plt.show()
-# x=[d/8 for d in range(1,9)]
-# for i in range(8):
-#     plt.plot(x, yacc[i])
-# plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
-# for i in range(8):
-#     plt.plot(x,yFNs[i], linestyle='-')
-# plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
+
 # plt.show()
+
+
+# %%
+
+
