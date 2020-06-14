@@ -16,7 +16,12 @@ unzip CT_COVID.zip
 unzip CT_NonCOVID.zip
 
 1. training
-To start the training, run train.ipynb. On the first cell, you should be able to find the hints on the options you can set. Choose the one you like, and then just run all cells sequentially, and the training shall begins.
+To start training, run
+
+python3 train.py
+
+At the very begining of the train.py, you should be able to find hints that indicates the settings you can change.
+By default, the train.py will train on resnet18, applying transfer learning.
 
 #################################
 #################################

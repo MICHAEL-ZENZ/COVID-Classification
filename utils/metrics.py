@@ -12,6 +12,12 @@ def Recall(confusionMatrix, num_class):
         recall.append(confusionMatrix[c,c]/confusionMatrix[:,c].sum())
     return np.array(recall)
 
+def TPrecision(confusionMatrix):
+    return confusionMatrix[0,0]/confusionMatrix[0,:].sum()
+
+def TRecall(confusionMatrix):
+    return confusionMatrix[0,0]/confusionMatrix[:,0].sum()
+
 def Acc(confusionMatrix,num_class):
     correct = 0
     total= 0

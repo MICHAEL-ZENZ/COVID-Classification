@@ -106,15 +106,13 @@ save_path = os.path.join(args.checkpoint_path, args.model_name)
 if os.path.exists(save_path) == False:
     os.makedirs(save_path)
 
-normalize = transforms.Normalize(mean=[0.45271412, 0.45271412, 0.45271412],
-                                    std=[0.33165374, 0.33165374, 0.33165374])
-test_trans = transforms.Compose(
-                                [
-                                transforms.Resize((480,480)),
-                                transforms.ToTensor(),
-                                normalize
-                                ]
-                            )
+normalize = transforms.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])
+test_trans = transforms.Compose([
+    transforms.Resize(224),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    normalize
+])
 
 testset = CovidCTDataset(root_dir=args.root_dir,
                             txt_COVID=args.test_COV,
