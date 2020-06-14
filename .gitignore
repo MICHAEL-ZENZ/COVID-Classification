@@ -15,7 +15,6 @@ hyperparameter_op.ipynb
 models/
 output/
 train-Copy1.ipynb
-train.py
 temp
 COVID-CT/Images-processed/CT_COVID
 COVID-CT/Images-processed/CT_NonCOVID
