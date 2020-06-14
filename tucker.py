@@ -230,8 +230,8 @@ for dR1 in range(1,9):
         r1,r2=dR1/8,dR2/8
         print("R1=%.3f, R2=%.3f"%(r1,r2))
         # saveDCPweights(args.model_name, model, test_loader, device, r1, r2)
-        acc,FN=testAndLoadFromChkpt(args.model_name, model, test_loader, device, r1, r2)
-        # acc,FN=buildAndTestDCPmodel(args.model_name, model, test_loader, device, r1, r2)
+        # acc,FN=testAndLoadFromChkpt(args.model_name, model, test_loader, device, r1, r2)
+        acc,FN=buildAndTestDCPmodel(args.model_name, model, test_loader, device, r1, r2)
         gc.collect()
         yacc[-1].append(acc)
         yFNs[-1].append(FN)

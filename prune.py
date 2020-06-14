@@ -20,8 +20,6 @@ from collections import OrderedDict
 import matplotlib.pyplot as plt
 import easydict
 
-import torchvision.models
-
 import gc
 
 print('Import Complete')
@@ -194,14 +192,14 @@ for m in model.modules():
         ydenseACC.append(yACC.copy())
         ydenseFN.append(yFN.copy())
 
-os.system("mkdir temp")
-np.save("temp/yconACC.npy",yconvACC)
-np.save("temp/yconvFN.npy",yconvFN)
-np.save("temp/ydenseACC.npy",ydenseACC)
-np.save("temp/ydenseFN.npy",ydenseFN)
+# os.system("mkdir temp")
+# np.save("temp/yconACC.npy",yconvACC)
+# np.save("temp/yconvFN.npy",yconvFN)
+# np.save("temp/ydenseACC.npy",ydenseACC)
+# np.save("temp/ydenseFN.npy",ydenseFN)
 
-yconvACC,yconvFN=np.load('temp/yconvACC.npy'),np.load('temp/yconvFN.npy')
-ydenseACC,ydenseFN=np.load('temp/ydenseACC.npy'),np.load('temp/ydenseFN.npy')
+# yconvACC,yconvFN=np.load('temp/yconvACC.npy'),np.load('temp/yconvFN.npy')
+# ydenseACC,ydenseFN=np.load('temp/ydenseACC.npy'),np.load('temp/ydenseFN.npy')
 
 plt.figure(figsize=(15,5))
 # plt.subplots_adjust(hspace=0.5)
