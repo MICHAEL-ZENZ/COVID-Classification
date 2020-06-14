@@ -250,8 +250,8 @@ for i in range(8):
             allIsNan=False
             break
     if allIsNan:yFNs[i]=None
-xacc=[d/8 for d in range(1,9) if yacc[i] is not None]
-xFN=[d/8 for d in range(1,9) if yFNs[i] is not None]
+xacc=[d/8 for d in range(1,9) if yacc[d] is not None]
+xFN=[d/8 for d in range(1,9) if yFNs[d] is not None]
 
 plt.figure(figsize=(16,6))
 plt.subplot(121)
