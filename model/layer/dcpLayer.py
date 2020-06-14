@@ -80,13 +80,13 @@ class dcpConv2D(nn.Module):
     if len(unmatchSettings)!=0:
       raise ValueError('input layer does not share same setting on {}'.format(unmatchSettings))
 
-    I,core,O=decompose(layer.weight.data.numpy(),self.R1,self.R2,kernel_first=False)
+    I,core,O=decompose(layer.weight.data.cpu().numpy(),self.R1,self.R2,kernel_first=False)
     I=I.transpose()
     I=I.reshape(I.shape+(1,1))
     O=O.reshape(O.shape+(1,1))
-    self.conv1.weight.data=torch.from_numpy(I.copy())
-    self.conv2.weight.data=torch.from_numpy(core.copy())
-    self.conv3.weight.data=torch.from_numpy(O.copy())
+    self.conv1.weight.data=torch.from_numpy(I.copy()).cuda()
+    self.conv2.weight.data=torch.from_numpy(core.copy()).cuda()
+    self.conv3.weight.data=torch.from_numpy(O.copy()).cuda()
     if self.bias:
       self.conv3.bias.data.copy_(layer.bias.data)
 

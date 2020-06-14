@@ -1,8 +1,10 @@
+# To add a new cell, type '# %%'
+# To add a new markdown cell, type '# %% [markdown]'
+# %%
 from model import Densenet, ResNet, VGG
 from model import dcpResNet
-from utils import CovidCTDataset,metrics, SimCLR_loss, LabelSmoothSoftmaxCE
-from utils import autoaugment as auto
 from model.layer.dcpLayer import dcpConv2D
+from utils import CovidCTDataset,metrics
 
 from torch.utils.data import DataLoader
 import argparse
@@ -23,36 +25,42 @@ import matplotlib.pyplot as plt
 import gc
 import easydict
 
+print("import complete")
+
+
+# %%
+
+args = easydict.EasyDict({
+    'model_name':'resnet18',
+    'checkpoint_path':'./checkpoint/CT',
+    'batch_size':16,
+    'lr':1e-4,
+    'epoch':50,
+    'root_dir':'./COVID-CT/Images-processed',
+
+    'train_COV':'./COVID-CT/Data-split/COVID/trainCT_COVID.txt',
+    'train_NonCOV':'./COVID-CT/Data-split/NonCOVID/trainCT_NonCOVID.txt',
+
+    'val_COV':'./COVID-CT/Data-split/COVID/valCT_COVID.txt',
+    'val_NonCOV':'./COVID-CT/Data-split/NonCOVID/valCT_NonCOVID.txt',
+
+    'test_COV':'./COVID-CT/Data-split/COVID/testCT_COVID.txt',
+    'test_NonCOV':'./COVID-CT/Data-split/NonCOVID/testCT_NonCOVID.txt',
+
+    'pretrained':True,
+    'save_name':'ResNet18.pt'
+})
+
+
 MODEL_DICT = {
-    'densenet121': Densenet.densenet121,
-    'densenet161': Densenet.densenet161,
-    'densenet169': Densenet.densenet169,
-    'densenet201': Densenet.densenet201,
     'resnet18': ResNet.resnet18,
-    'resnet50': ResNet.resnet50,
-    'resnet101': ResNet.resnet101,
-    'resnet152': ResNet.resnet152,
-    'wide_resnet101': ResNet.wide_resnet101_2,
-    'wide_resnet50': ResNet.wide_resnet50_2,
-    'vgg16': VGG.vgg16,
+    'resnet50': ResNet.resnet50
 }
 
 DCP_MODEL_DICT={
     'resnet18':dcpResNet.resnet18,
-    'resnet50':dcpResNet.resnet50,
-    'resnet101':dcpResNet.resnet101,
-    'resnet152':dcpResNet.resnet152
+    'resnet50':dcpResNet.resnet50
 }
-
-models_config = (
-    # model name, model path, weight, data_parallel
-    ('resnet152', 'resnet152_4_4_crop_480_b16_pretrained.pt', 1, True),
-    ('resnet152', 'resnet152_4_4_crop_480_b16w1.2_pretrained.pt', 1, True),
-    ('resnext101', 'resnext101_4_4_crop_480_pretrained.pt', 1, True),
-    ('densenet169', 'densenet169-480-moco-soft-COVID.pt', 1, True),
-    ('densenet169', 'densenet169_4_4_crop_480_b16_pretrained.pt', 1, True),
-    ('densenet169', 'densenet169_soft_480_pretrained.pt', 1, True),
-)
 
 def test(model, nb_classes, test_loader, device):
     model.eval()
@@ -76,7 +84,7 @@ def test(model, nb_classes, test_loader, device):
     print(confusion_matrix)
     precision = metrics.Precision(confusion_matrix.cpu().numpy(), nb_classes)
     recall = metrics.Recall(confusion_matrix, nb_classes)
-    f1 = metrics.f1_score(precision, recall)
+    f1 = metrics.F1(precision, recall)
     acc = metrics.Acc(confusion_matrix,nb_classes)
 
     return AUC, precision, recall, f1, acc, avg_val_loss
@@ -134,27 +142,11 @@ def testAndLoadFromChkpt(model_name, preTrainedModel, test_loader, device, R1_ra
 
     return acc, recall[1]
 
+print("define complete")
 
-args = easydict.EasyDict({
-    'model_name':'resnet18',
-    'checkpoint_path':'./checkpoint/CT',
-    'batch_size':16,
-    'lr':1e-4,
-    'epoch':50,
-    'root_dir':'./COVID-CT/Images-processed',
 
-    'train_COV':'./COVID-CT/Data-split/COVID/trainCT_COVID.txt',
-    'train_NonCOV':'./COVID-CT/Data-split/NonCOVID/trainCT_NonCOVID.txt',
+# %%
 
-    'val_COV':'./COVID-CT/Data-split/COVID/valCT_COVID.txt',
-    'val_NonCOV':'./COVID-CT/Data-split/NonCOVID/valCT_NonCOVID.txt',
-
-    'test_COV':'./COVID-CT/Data-split/COVID/testCT_COVID.txt',
-    'test_NonCOV':'./COVID-CT/Data-split/NonCOVID/testCT_NonCOVID.txt',
-
-    'pretrained':True,
-    'save_name':'ResNet18.pt'
-})
 
 if not args.pretrained:
     print("The Model Must Be Trained First!")
@@ -176,22 +168,7 @@ test_trans = transforms.Compose(
                                 normalize
                                 ]
                             )
-trainset = CovidCTDataset(root_dir=args.root_dir,
-                            txt_COVID=args.train_COV,
-                            txt_NonCOVID=args.train_NonCOV,
-                            transform=transforms.Compose(
-                                [transforms.RandomResizedCrop((480,480),scale=(0.8,1.2)),
-                                    transforms.RandomHorizontalFlip(),
-                                    auto.ImageNetPolicy(),
-                                    transforms.ToTensor(),
-                                    normalize
-                                    ]
-                            ))
-valset = CovidCTDataset(root_dir=args.root_dir,
-                        txt_COVID=args.val_COV,
-                        txt_NonCOVID=args.val_NonCOV,
-                            transform=test_trans
-                            )
+
 
 testset = CovidCTDataset(root_dir=args.root_dir,
                             txt_COVID=args.test_COV,
@@ -199,17 +176,12 @@ testset = CovidCTDataset(root_dir=args.root_dir,
                             transform=test_trans
                             )
 
-train_loader = DataLoader(trainset,
-                            batch_size=args.batch_size,
-                            num_workers=8,
-                            shuffle=True)
-val_loader = DataLoader(valset, batch_size=args.batch_size)
 test_loader = DataLoader(testset,batch_size=args.batch_size)
 
 PRINT_INTERVAL = 10
 nb_classes = 2
 seg_num_class = 2
-print(args.model_name,trainset.classes)
+print(args.model_name,testset.classes)
 
 model = MODEL_DICT[args.model_name](num_classes=nb_classes, pretrained=args.pretrained)
 cntConv=0
@@ -231,18 +203,24 @@ elif torch.cuda.is_available():
 else:
     print("Using CPU")
 
+optimizer = torch.optim.Adam(model.parameters(),lr = args.lr)
+sheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
 
+print("model load complete")
+
+
+# %%
 save = os.path.join(save_path,'{}'.format(args.save_name))
 
-print('...........Testing..........')
 pretrained_state_dict=torch.load(save, map_location=torch.device('cpu'))
 if not torch.cuda.is_available():
     pretrained_state_dict=convertPaWeights2NonP(pretrained_state_dict)
 model.load_state_dict(pretrained_state_dict)
 
-# print("spot check (R1=0.8, R2=0.8):")
-# buildAndTestDCPmodel(args.model_name, model, test_loader, device, 0.8, 0.8)
+print("pretrained load complete")
 
+
+# %%
 yacc,yFNs=[],[]
 for dR1 in range(1,9):
     yacc.append([])
@@ -258,17 +236,43 @@ for dR1 in range(1,9):
         yacc[-1].append(acc)
         yFNs[-1].append(FN)
 
-for i in range(8):
-    for j in range(8):
-        if yacc[i][j]==np.nan:yacc[i]=None
-        if yFNs[i][j]==np.nan:yFNs[i]=None
+print("inference complete")
 
+
+# %%
+for i in range(8):
+    allIsNan=True
+    for j in range(8):
+        if yacc[i][j]!=np.nan:
+            allIsNan=False
+            break
+    if allIsNan:yacc[i]=None
+    allIsNan=True
+    for j in range(8):
+        if yFNs[i][j]!=np.nan:
+            allIsNan=False
+            break
+    if allIsNan:yFNs[i]=None
 xacc=[d/8 for d in range(1,9) if yacc[i] is not None]
 xFN=[d/8 for d in range(1,9) if yFNs[i] is not None]
+
+plt.figure(figsize=(16,6))
+plt.subplot(121)
 for i in range(8):
-    plt.plot(xacc, yacc[xacc[i]-1])
+    if yacc[i] is None:continue
+    plt.plot(xacc, yacc[i])
 plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
+plt.title("Tucker Decomposition")
+plt.xlabel("R2 ratio")
+plt.ylabel("Accuracy")
+plt.subplot(122)
 for i in range(8):
-    plt.plot(xFN,yFNs[xFN[i]], linestyle='-')
+    if yFNs[i] is None:continue
+    plt.plot(xFN,yFNs[i], linestyle='-')
 plt.legend(["R1="+str(i/8) for i in range(1,9)], loc='lower right')
 plt.show()
+
+
+# %%
+
+

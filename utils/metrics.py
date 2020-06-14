@@ -1,1 +1,25 @@
-import numpy as npdef Precision(conf_m, num_class):    precision = []    for c in range(num_class):        precision.append(conf_m[c,c]/conf_m[c,:].sum())    return np.array(precision)def Recall(conf_m, num_class):    recall = []    for c in range(num_class):        recall.append(conf_m[c,c]/conf_m[:,c].sum())    return np.array(recall)def Acc(conf_m,num_class):    correct = 0    total= 0    for c in range(num_class):        correct += conf_m[c,c]        total += conf_m[c,:].sum()    return correct/totaldef f1_score(precision,recall):    return (2*precision*recall)/(precision+recall)
+import numpy as np
+
+def Precision(confusionMatrix, num_class):
+    precision = []
+    for c in range(num_class):
+        precision.append(confusionMatrix[c,c]/confusionMatrix[c,:].sum())
+    return np.array(precision)
+
+def Recall(confusionMatrix, num_class):
+    recall = []
+    for c in range(num_class):
+        recall.append(confusionMatrix[c,c]/confusionMatrix[:,c].sum())
+    return np.array(recall)
+
+def Acc(confusionMatrix,num_class):
+    correct = 0
+    total= 0
+    for c in range(num_class):
+        correct += confusionMatrix[c,c]
+        total += confusionMatrix[c,:].sum()
+    return correct/total
+
+
+def F1(precision,recall):
+    return (2*precision*recall)/(precision+recall)

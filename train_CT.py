@@ -1,5 +1,5 @@
 from model import Densenet, ResNet, VGG
-from utils import CovidCTDataset,metrics, SimCLR_loss, LabelSmoothSoftmaxCE
+from utils import CovidCTDataset, metrics
 from utils import autoaugment as auto
 
 from torch.utils.data import DataLoader
@@ -29,16 +29,6 @@ MODEL_DICT = {
     'wide_resnet50': ResNet.wide_resnet50_2,
     'vgg16': VGG.vgg16,
 }
-
-models_config = (
-    # model name, model path, weight, data_parallel
-    ('resnet152', 'resnet152_4_4_crop_480_b16_pretrained.pt', 1, True),
-    ('resnet152', 'resnet152_4_4_crop_480_b16w1.2_pretrained.pt', 1, True),
-    ('resnext101', 'resnext101_4_4_crop_480_pretrained.pt', 1, True),
-    ('densenet169', 'densenet169-480-moco-soft-COVID.pt', 1, True),
-    ('densenet169', 'densenet169_4_4_crop_480_b16_pretrained.pt', 1, True),
-    ('densenet169', 'densenet169_soft_480_pretrained.pt', 1, True),
-)
 
 def train(model, train_loader, optimizer, PRINT_INTERVAL, epoch, args, device):
     model.train()
@@ -77,46 +67,17 @@ def test(model, nb_classes, test_loader, device):
     print(confusion_matrix)
     precision = metrics.Precision(confusion_matrix.cpu().numpy(), nb_classes)
     recall = metrics.Recall(confusion_matrix, nb_classes)
-    f1 = metrics.f1_score(precision, recall)
+    f1 = metrics.F1(precision, recall)
     acc = metrics.Acc(confusion_matrix,nb_classes)
 
     return AUC, precision, recall, f1, acc, avg_val_loss
-
-def test_mask(model, nb_classes, test_loader, device):
-    model.eval()
-    predlist = []
-    targetlist = []
-    confusion_matrix = torch.zeros(nb_classes, nb_classes)
-    avg_val_loss = 0
-    with torch.no_grad():
-        for index, batch in enumerate(tqdm(test_loader)):
-            img, label = batch['img'].to(device), batch['label'].to(device)
-            cls_pred, mask_pred = model(img)
-            _, preds = torch.max(cls_pred, 1)
-
-            avg_val_loss += F.cross_entropy(cls_pred, label).item()/len(test_loader)
-            for t, p in zip(label.view(-1), preds.view(-1)):
-                confusion_matrix[t.long(), p.long()] += 1
-            y_score = F.softmax(cls_pred, dim=1)
-            predlist = np.append(predlist, y_score.cpu().numpy()[:, 1])
-            targetlist = np.append(targetlist, label.long().cpu().numpy())
-
-    AUC = roc_auc_score(targetlist, predlist)
-    print(confusion_matrix)
-    precision = metrics.Precision(confusion_matrix.cpu().numpy(), nb_classes)
-    recall = metrics.Recall(confusion_matrix, nb_classes)
-    f1 = metrics.f1_score(precision, recall)
-    acc = metrics.Acc(confusion_matrix,nb_classes)
-
-    return AUC, precision, recall, f1, acc, avg_val_loss
-
 
 args = easydict.EasyDict({
     'model_name':'resnet18',
     'checkpoint_path':'./checkpoint/CT',
     'batch_size':16,
     'lr':1e-4,
-    'epoch':50,
+    'epoch':200,
     'root_dir':'./COVID-CT/Images-processed',
 
     'train_COV':'./COVID-CT/Data-split/COVID/trainCT_COVID.txt',

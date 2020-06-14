@@ -1,11 +1,7 @@
-# To add a new cell, type '# %%'
-# To add a new markdown cell, type '# %% [markdown]'
-# %%
 from model import Densenet, ResNet, VGG
 from model import prunnableResNet
 from model.layer.prunableLayer import prunnableConv2D,prunnableLinear
-from utils import CovidCTDataset,metrics, SimCLR_loss, LabelSmoothSoftmaxCE
-from utils import autoaugment as auto
+from utils import CovidCTDataset,metrics
 
 from torch.utils.data import DataLoader
 import argparse
@@ -24,24 +20,36 @@ from collections import OrderedDict
 import matplotlib.pyplot as plt
 import easydict
 
+import torchvision.models
+
 import gc
 
 print('Import Complete')
 
+args = easydict.EasyDict({
+    'model_name':'resnet18',
+    'checkpoint_path':'./checkpoint/CT',
+    'batch_size':16,
+    'lr':1e-4,
+    'epoch':50,
+    'root_dir':'./COVID-CT/Images-processed',
 
-# %%
+    'train_COV':'./COVID-CT/Data-split/COVID/trainCT_COVID.txt',
+    'train_NonCOV':'./COVID-CT/Data-split/NonCOVID/trainCT_NonCOVID.txt',
 
-MODEL_DICT = {
-    'densenet121': Densenet.densenet121,
-    'densenet169': Densenet.densenet169,
-    'resnet18': ResNet.resnet18,
-    'resnet50': ResNet.resnet50,
-    'vgg16': VGG.vgg16,
-}
+    'val_COV':'./COVID-CT/Data-split/COVID/valCT_COVID.txt',
+    'val_NonCOV':'./COVID-CT/Data-split/NonCOVID/valCT_NonCOVID.txt',
+
+    'test_COV':'./COVID-CT/Data-split/COVID/testCT_COVID.txt',
+    'test_NonCOV':'./COVID-CT/Data-split/NonCOVID/testCT_NonCOVID.txt',
+
+    'pretrained':True,
+    'save_name':'ResNet18.pt'
+})
 
 PRUNNABLE_MODEL_DICT={
     'resnet18':prunnableResNet.resnet18,
-    'resnet50':prunnableResNet.resnet50,
+    'resnet50':prunnableResNet.resnet50
 }
 
 def test(model, nb_classes, test_loader, device):
@@ -66,15 +74,14 @@ def test(model, nb_classes, test_loader, device):
     print(confusion_matrix)
     precision = metrics.Precision(confusion_matrix.cpu().numpy(), nb_classes)
     recall = metrics.Recall(confusion_matrix, nb_classes)
-    f1 = metrics.f1_score(precision, recall)
+    f1 = metrics.F1(precision, recall)
     acc = metrics.Acc(confusion_matrix,nb_classes)
 
-    return AUC, precision, recall, f1, acc.numpy().tolist(), avg_val_loss
+    return AUC, precision, recall, f1, acc, avg_val_loss
 
 def convertPaWeights2NonP(pretrained_state_dict):
   nonpStateDict=OrderedDict()
   for k, v in pretrained_state_dict.items():
-    if not 'module' in k:return pretrained_state_dict
     nonpStateDict[k[7:]]=v
   return nonpStateDict
 
@@ -88,43 +95,11 @@ def convertStateDict2Prunnable(state_dict):
             p=k.find('fc')
             k=k[:p+3]+'linear.'+k[p+3:]
             
+
         prunedStateDict[k]=v
     return prunedStateDict
 
-models_config = (
-    # model name, model path, weight, data_parallel
-    ('resnet152', 'resnet152_4_4_crop_480_b16_pretrained.pt', 1, True),
-    ('resnet152', 'resnet152_4_4_crop_480_b16w1.2_pretrained.pt', 1, True),
-    ('resnext101', 'resnext101_4_4_crop_480_pretrained.pt', 1, True),
-    ('densenet169', 'densenet169-480-moco-soft-COVID.pt', 1, True),
-    ('densenet169', 'densenet169_4_4_crop_480_b16_pretrained.pt', 1, True),
-    ('densenet169', 'densenet169_soft_480_pretrained.pt', 1, True),
-)
 
-args = easydict.EasyDict({
-    'model_name':'resnet18',
-    'checkpoint_path':'./checkpoint/CT',
-    'batch_size':16,
-    'lr':1e-4,
-    'epoch':50,
-    'root_dir':'./COVID-CT/Images-processed',
-
-    'train_COV':'./COVID-CT/Data-split/COVID/trainCT_COVID.txt',
-    'train_NonCOV':'./COVID-CT/Data-split/NonCOVID/trainCT_NonCOVID.txt',
-
-    'val_COV':'./COVID-CT/Data-split/COVID/valCT_COVID.txt',
-    'val_NonCOV':'./COVID-CT/Data-split/NonCOVID/valCT_NonCOVID.txt',
-
-    'test_COV':'./COVID-CT/Data-split/COVID/testCT_COVID.txt',
-    'test_NonCOV':'./COVID-CT/Data-split/NonCOVID/testCT_NonCOVID.txt',
-
-    'pretrained':True,
-    'save_name':'ResNet18.pt'
-})
-
-if not args.pretrained:
-    print("The Model Must Be Trained First!")
-    quit()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Device {}".format(device))
@@ -142,22 +117,6 @@ test_trans = transforms.Compose(
                                 normalize
                                 ]
                             )
-trainset = CovidCTDataset(root_dir=args.root_dir,
-                            txt_COVID=args.train_COV,
-                            txt_NonCOVID=args.train_NonCOV,
-                            transform=transforms.Compose(
-                                [transforms.RandomResizedCrop((480,480),scale=(0.8,1.2)),
-                                    transforms.RandomHorizontalFlip(),
-                                    auto.ImageNetPolicy(),
-                                    transforms.ToTensor(),
-                                    normalize
-                                    ]
-                            ))
-valset = CovidCTDataset(root_dir=args.root_dir,
-                        txt_COVID=args.val_COV,
-                        txt_NonCOVID=args.val_NonCOV,
-                            transform=test_trans
-                            )
 
 testset = CovidCTDataset(root_dir=args.root_dir,
                             txt_COVID=args.test_COV,
@@ -165,38 +124,23 @@ testset = CovidCTDataset(root_dir=args.root_dir,
                             transform=test_trans
                             )
 
-train_loader = DataLoader(trainset,
-                            batch_size=args.batch_size,
-                            num_workers=8,
-                            shuffle=True)
-val_loader = DataLoader(valset, batch_size=args.batch_size)
 test_loader = DataLoader(testset,batch_size=args.batch_size)
 
 PRINT_INTERVAL = 10
 nb_classes = 2
-print(args.model_name,trainset.classes)
+seg_num_class = 2
+print(args.model_name,testset.classes)
 
 model = PRUNNABLE_MODEL_DICT[args.model_name](num_classes=nb_classes, pretrained=args.pretrained)
 
+
 save = os.path.join(save_path,'{}'.format(args.save_name))
-
-cntConv=0
-cntDense=0
-
-for m in model.modules():
-    if isinstance(m, prunnableConv2D):
-        cntConv+=1
-    elif isinstance(m, prunnableLinear):
-        cntDense+=1
-print("In total %d conv, %d dense"%(cntConv,cntDense))
-
-print("load pretrained model")
 pretrained_state_dict=torch.load(save, map_location=torch.device('cpu'))
-pretrained_state_dict=convertPaWeights2NonP(pretrained_state_dict)
+if not torch.cuda.is_available():
+    pretrained_state_dict=convertPaWeights2NonP(pretrained_state_dict)
 model.load_state_dict(convertStateDict2Prunnable(pretrained_state_dict))
-print('pretrained model loaded')
 
-if torch.cuda.device_count() >= 1:
+if torch.cuda.device_count() > 1:
     # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
     model = nn.DataParallel(model).to(device)
     print("Using %d GPUs"%(torch.cuda.device_count()))
@@ -208,16 +152,23 @@ elif torch.cuda.is_available():
 else:
     print("Using CPU")
 
+cntConv=0
+cntDense=0
 
-# %%
+for m in model.modules():
+    if isinstance(m, prunnableConv2D):
+        cntConv+=1
+    elif isinstance(m, prunnableLinear):
+        cntDense+=1
+print("In total %d conv, %d dense"%(cntConv,cntDense))
 
+printConvs=5
+convsDivider=cntConv//printConvs
 
-
-# %%
-
-ratios=[i/100 for i in range(0,91,10)]
+ratios=[i/100 for i in range(0,91,2)]
 yconvACC,yconvFN=[],[]
 ydenseACC,ydenseFN=[],[]
+
 cntConv=-1
 for m in model.modules():
     yACC=[]
@@ -225,7 +176,7 @@ for m in model.modules():
     if isinstance(m, (prunnableConv2D,prunnableLinear)):
         if isinstance(m,prunnableConv2D):
             cntConv+=1
-            if cntConv%10!=0:continue
+            if cntConv%convsDivider!=0:continue
         print(m) 
         for r in ratios:
             m.setPruneRatio(r)
@@ -233,7 +184,7 @@ for m in model.modules():
             AUC, precision, recall, f1, acc, mean_loss = test(model, 2, test_loader, device)
             print('Precision {}\tRecall {}\nF1 {}\nAUC {}\tAcc {}\tMean Loss {}'.format(precision, recall, f1, AUC, acc,
                                                                             mean_loss))
-            yACC.append(acc)
+            yACC.append(acc.numpy().tolist())
             yFN.append(recall[1])
             m.resetPruneRatio()
     if isinstance(m,prunnableConv2D):
@@ -243,51 +194,41 @@ for m in model.modules():
         ydenseACC.append(yACC.copy())
         ydenseFN.append(yFN.copy())
 
+os.system("mkdir temp")
+np.save("temp/yconACC.npy",yconvACC)
+np.save("temp/yconvFN.npy",yconvFN)
+np.save("temp/ydenseACC.npy",ydenseACC)
+np.save("temp/ydenseFN.npy",ydenseFN)
 
-# %%
-np.save('yconvACC.npy', yconvACC)
-np.save('yconvFN.npy', yconvFN)
-np.save('ydenseACC.npy', ydenseACC)
-np.save('ydenseFN.npy', ydenseFN)
-yconvACC_bak,yconvFN_bak=yconvACC.copy(),yconvFN.copy()
-ydenseACC_bak,ydenseFN_bak=ydenseACC.copy(),ydenseFN.copy()
+yconvACC,yconvFN=np.load('temp/yconvACC.npy'),np.load('temp/yconvFN.npy')
+ydenseACC,ydenseFN=np.load('temp/ydenseACC.npy'),np.load('temp/ydenseFN.npy')
 
+plt.figure(figsize=(15,5))
+# plt.subplots_adjust(hspace=0.5)
+convLedgends=[]
+cntConv=0
+for m in model.modules():
+    if isinstance(m,prunnableConv2D):
+        cntConv+=1
+        if cntConv%convsDivider!=0:continue
+        convLedgends.append("Conv%d"%cntConv)
 
-# %%
-
-yconvACC,yconvFN=np.load('yconvACC.npy'),np.load('yconvFN.npy')
-ydenseACC,ydenseFN=np.load('ydenseACC.npy'),np.load('ydenseFN.npy')
-
-plt.figure(figsize=(15,9))
-plt.subplots_adjust(hspace=0.5)
-
-plt.subplot(2,2,1)
+plt.subplot(1,2,1)
 for yACC in yconvACC:
     plt.plot(ratios, yACC)
-plt.title("Accuracy")
-plt.legend(["conv"+str(i*10+1) for i in range(5)], loc='lower right')
-plt.subplot(2,2,2)
-for yFN in yconvFN:
-    plt.plot(ratios, yFN)
-plt.title("False Negative")
-plt.legend(["conv"+str(i*10+1) for i in range(5)], loc='lower left')
-plt.subplot(2,2,3)
+plt.ylabel("Accuracy")
+plt.xlabel("Prune Ratio")
+plt.title("Conv")
+plt.legend(convLedgends,loc='lower left')
+plt.subplot(1,2,2)
 for yACC in ydenseACC:
     plt.plot(ratios,yACC)
-plt.title("Accuracy")
-plt.legend(["dense"], loc='lower right')
-plt.subplot(2,2,4)
-for yFN in ydenseFN:
-    plt.plot(ratios,yFN)
-plt.title("False Negative")
+plt.xlabel("Prune Ratio")
+plt.ylabel("Accuracy")
+plt.title("Dense")
 plt.legend(["dense"], loc='lower right')
 
 
 plt.show()
 
 # plt.show()
-
-
-# %%
-
-
