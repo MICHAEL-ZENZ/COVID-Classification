@@ -1,4 +1,4 @@
-from model import Densenet, ResNet, VGG
+from model import ResNet
 from model import prunnableResNet
 from model.layer.prunableLayer import prunnableConv2D,prunnableLinear
 from utils import CovidCTDataset,metrics

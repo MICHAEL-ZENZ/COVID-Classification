@@ -24,10 +24,14 @@ To start the training, run train.ipynb. On the first cell, you should be able to
 Before you start running pruning and tucker decomposition experiment, make sure you have already trained a model and save the statedict. A pretrained statedict is provided at checkpoint/CT/resnet18/ResNet18.pt.
 
 2. pruning
-To start pruning experiment, run python3 prune.py
+To start pruning experiment, run 
+
+python3 prune.py
 
 3. tucker decomposition
-To start tucker decomposition experiment, run python3 tucker.py
+To start tucker decomposition experiment, run 
+
+python3 tucker.py
 
 Members:
 Zhifang Zeng

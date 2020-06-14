@@ -1,7 +1,7 @@
 # To add a new cell, type '# %%'
 # To add a new markdown cell, type '# %% [markdown]'
 # %%
-from model import Densenet, ResNet, VGG
+from model import ResNet
 from model import dcpResNet
 from model.layer.dcpLayer import dcpConv2D
 from utils import CovidCTDataset,metrics
